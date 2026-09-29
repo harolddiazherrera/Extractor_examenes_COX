@@ -69,3 +69,4 @@ Vigencia hasta · Resultado · Sucursal / lugar · Estado extracción
 
 - **1.0 (2026-09-29)**: formatos CMT y WORKMED; versión web, escritorio y línea de comandos.
 - **1.1 (2026-09-29)**: versión web con panel de funciones a la izquierda, configuración y resultados al centro, progreso con tiempo estimado y botones Pausar / Detener / Reiniciar, y registro de eventos con hora. Reglas de extracción sin cambios.
+- **1.2 (2026-09-29)**: corrige el ancho de las columnas de la versión web, que se desarmaba al mostrar la tabla de resultados; las proporciones 1/4 · 2/4 · 1/4 quedan fijas.

@@ -65,7 +65,9 @@
   .grid {
     flex: 1; min-height: 0;
     display: grid;
-    grid-template-columns: 1fr 2fr 1fr;      /* izquierda = 1/4 del ancho total */
+    /* Columnas ancladas a 1/4 · 2/4 · 1/4 del ancho: minmax(0, …) impide que el
+       contenido (por ejemplo la tabla de resultados) las ensanche. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
     grid-template-rows: minmax(0, auto) minmax(0, 1fr);
     gap: 12px; padding: 12px 18px 16px;
   }
@@ -76,14 +78,14 @@
 
   .caja {
     background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
-    display: flex; flex-direction: column; min-height: 0;
+    display: flex; flex-direction: column; min-height: 0; min-width: 0;
   }
   .caja > h2 {
     margin: 0; padding: 10px 14px; font-size: 13px; font-weight: 600;
     border-bottom: 1px solid var(--line); background: var(--panel-2);
     border-radius: 6px 6px 0 0;
   }
-  .caja .cuerpo { padding: 12px 14px; overflow: auto; min-height: 0; flex: 1; }
+  .caja .cuerpo { padding: 12px 14px; overflow: auto; min-height: 0; min-width: 0; flex: 1; }
 
   /* ---------- Panel izquierdo: lista de funciones ---------- */
   .funciones { display: flex; flex-direction: column; gap: 2px; }
@@ -101,6 +103,7 @@
 
   /* ---------- Centro: configuración de la función + resultados ---------- */
   .col-cen .cuerpo { display: flex; flex-direction: column; gap: 14px; }
+  .config, .resultados { min-width: 0; max-width: 100%; }
   .config h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
   .config .desc { margin: 0 0 12px; color: var(--ink-2); max-width: 70ch; }
 
@@ -128,7 +131,7 @@
   button:focus-visible { outline: 3px solid var(--steel-2); outline-offset: 2px; }
   label.chk { display: inline-flex; gap: 8px; align-items: center; color: var(--ink-2); }
 
-  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; min-width: 0; }
   .summary div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
   .summary b { display: block; font-size: 22px; font-weight: 600; }
   .summary small { color: var(--ink-2); }
@@ -140,7 +143,7 @@
   .downloads button { padding: 10px 16px; }
   .downloads .hint { flex-basis: 100%; color: var(--ink-2); font-size: 13px; }
 
-  .tablewrap { overflow-x: auto; margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  .tablewrap { overflow-x: auto; max-width: 100%; margin-top: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
   table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
   th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   th { position: sticky; top: 0; background: var(--panel-2); font-weight: 600; }
@@ -264,7 +267,7 @@
 // ============================================================================
 // SECCIÓN 1 · Configuración general
 // ============================================================================
-const VERSION = "1.1 (2026-09-29)";
+const VERSION = "1.2 (2026-09-29)";
 document.getElementById("ver").textContent = VERSION;
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
