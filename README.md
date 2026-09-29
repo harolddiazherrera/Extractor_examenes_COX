@@ -20,10 +20,18 @@ inteligencia artificial. Los archivos nunca se envían a un servidor.
 
 ## Versión web
 
-1. Abre `index.html` (o la URL de GitHub Pages).
-2. Arrastra los PDF o una carpeta completa. La casilla *Incluir subcarpetas* controla si se procesan las carpetas internas.
-3. Presiona **Procesar**.
-4. Descarga:
+La pantalla se divide en tres columnas: a la izquierda la lista de funciones, al centro la
+configuración de la función elegida y sus resultados, y a la derecha el progreso (porcentaje,
+archivos procesados, tiempo transcurrido y restante) con los botones **Pausar**, **Detener**
+y **Reiniciar**, más el registro de eventos con hora. Los controles de ejecución funcionan
+igual en todas las funciones; al detener se conserva lo procesado hasta ese momento y el
+Excel se marca como corrida parcial.
+
+1. Abre `index.html` (o la URL publicada).
+2. Elige la función **Extraer exámenes a Excel** en el panel izquierdo.
+3. Arrastra los PDF o una carpeta completa. La casilla *Incluir subcarpetas* controla si se procesan las carpetas internas.
+4. Presiona **Procesar**.
+5. Descarga:
    - **Excel de datos**: una fila por examen.
    - **Informe de incidencias**: PDF no reconocidos o con campos faltantes, junto con el texto leído de cada página. Este archivo es el insumo para agregar formatos nuevos al programa.
 
@@ -35,6 +43,14 @@ La página carga dos librerías públicas desde CDN (`pdf.js` y `SheetJS`), por 
 pip install -r requirements.txt
 python extractor_examenes_gui.py
 ```
+
+## Cómo agregar una función nueva (versión web)
+
+Las funciones se definen en el arreglo `FUNCIONES` de `index.html`. Cada una es un objeto
+con `id`, `nombre`, `descripcion`, `montar(cont)` (dibuja su configuración en el panel
+central), `reiniciar()` y su lógica de ejecución, que usa los objetos comunes `ejecucion`
+(pausar/detener), `progreso` y `evento` para integrarse con la interfaz. Al agregarla al
+arreglo aparece automáticamente en el panel izquierdo.
 
 ## Cómo agregar un formato nuevo
 
@@ -52,3 +68,4 @@ Vigencia hasta · Resultado · Sucursal / lugar · Estado extracción
 ## Historial de versiones
 
 - **1.0 (2026-09-29)**: formatos CMT y WORKMED; versión web, escritorio y línea de comandos.
+- **1.1 (2026-09-29)**: versión web con panel de funciones a la izquierda, configuración y resultados al centro, progreso con tiempo estimado y botones Pausar / Detener / Reiniciar, y registro de eventos con hora. Reglas de extracción sin cambios.
