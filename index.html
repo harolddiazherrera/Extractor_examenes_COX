@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Extractor de exámenes ocupacionales</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #eef1f4;
+    --panel: #ffffff;
+    --ink: #17212b;
+    --ink-2: #4b5a68;
+    --line: #cfd6dd;
+    --steel: #24425f;
+    --steel-2: #35597c;
+    --ok: #1f7a4d;
+    --ok-bg: #e2f3ea;
+    --warn: #9a6400;
+    --warn-bg: #fff1cf;
+    --bad: #a52a2a;
+    --bad-bg: #fbe4e4;
+    --drop: #dfe7ee;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: "IBM Plex Sans", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141a20; --panel: #1d252e; --ink: #e8edf2; --ink-2: #a3b0bd;
+      --line: #34414e; --steel: #7fa6cc; --steel-2: #9dbde0;
+      --ok: #6fd39a; --ok-bg: #1d3a2b; --warn: #f0c04a; --warn-bg: #3d3210;
+      --bad: #f08a8a; --bad-bg: #4a2222; --drop: #232d38;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141a20; --panel: #1d252e; --ink: #e8edf2; --ink-2: #a3b0bd;
+    --line: #34414e; --steel: #7fa6cc; --steel-2: #9dbde0;
+    --ok: #6fd39a; --ok-bg: #1d3a2b; --warn: #f0c04a; --warn-bg: #3d3210;
+    --bad: #f08a8a; --bad-bg: #4a2222; --drop: #232d38;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  *, *::before, *::after { box-sizing: inherit; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 15px; line-height: 1.5;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  header h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--ink-2); max-width: 70ch; }
+
+  /* Zona de carga: el elemento protagonista */
+  .drop {
+    margin-top: 28px; border: 2px dashed var(--steel); border-radius: 6px;
+    background: var(--drop); padding: 40px 24px; text-align: center;
+    cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .drop.over { background: var(--panel); border-color: var(--steel-2); border-style: solid; }
+  .drop strong { display: block; font-size: 18px; font-weight: 600; color: var(--steel); }
+  .drop span { color: var(--ink-2); }
+  .drop input { display: none; }
+  .drop .alt { margin-top: 14px; }
+  .drop .alt button { margin: 0 4px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin-top: 16px; }
+  .controls .count { color: var(--ink-2); flex: 1; }
+  button {
+    font: inherit; font-weight: 500; border-radius: 4px; padding: 9px 16px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer;
+  }
+  button.primary { background: var(--steel); border-color: var(--steel); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  button:focus-visible { outline: 3px solid var(--steel-2); outline-offset: 2px; }
+  label.chk { display: inline-flex; gap: 8px; align-items: center; color: var(--ink-2); }
+
+  progress { width: 100%; height: 8px; margin-top: 16px; accent-color: var(--steel); }
+  .status { margin-top: 6px; color: var(--ink-2); font-family: var(--mono); font-size: 13px; min-height: 1.4em; }
+
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 24px; }
+  .summary div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; }
+  .summary b { display: block; font-size: 24px; font-weight: 600; }
+  .summary small { color: var(--ink-2); }
+  .summary .ok b { color: var(--ok); }
+  .summary .warn b { color: var(--warn); }
+  .summary .bad b { color: var(--bad); }
+
+  .downloads { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+  .downloads button { padding: 12px 18px; }
+  .downloads .hint { flex-basis: 100%; color: var(--ink-2); font-size: 14px; }
+
+  .tablewrap { overflow-x: auto; margin-top: 24px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); font-weight: 600; }
+  td.estado-ok { color: var(--ok); }
+  td.estado-warn { color: var(--warn); }
+  td.estado-bad { color: var(--bad); }
+  .tablewrap p { margin: 0; padding: 10px; color: var(--ink-2); font-size: 13px; }
+
+  details { margin-top: 20px; }
+  summary { cursor: pointer; color: var(--ink-2); }
+  pre.log { font-family: var(--mono); font-size: 12px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 12px; max-height: 260px; overflow: auto; margin: 8px 0 0; white-space: pre-wrap; }
+
+  footer { margin-top: 40px; color: var(--ink-2); font-size: 13px; border-top: 1px solid var(--line); padding-top: 16px; }
+  footer code { font-family: var(--mono); }
+  .hidden { display: none; }
+  @media (prefers-reduced-motion: reduce) { .drop { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Extractor de exámenes ocupacionales</h1>
+    <p>Carga los informes en PDF y obtén un Excel con nombre, RUT, cargo, código de verificación, examen y fechas.
+       Los archivos se procesan en tu navegador; nada se envía a un servidor.</p>
+  </header>
+
+  <div class="drop" id="drop" tabindex="0" role="button" aria-label="Cargar archivos PDF">
+    <strong>Arrastra aquí los PDF o una carpeta completa</strong>
+    <span>Se aceptan informes de CMT y WORKMED. Otros formatos quedan registrados en el informe de incidencias.</span>
+    <div class="alt">
+      <button type="button" id="btnFiles">Elegir archivos</button>
+      <button type="button" id="btnFolder">Elegir carpeta</button>
+    </div>
+    <input type="file" id="inFiles" accept="application/pdf,.pdf" multiple>
+    <input type="file" id="inFolder" webkitdirectory directory multiple>
+  </div>
+
+  <div class="controls">
+    <span class="count" id="count">Ningún archivo cargado.</span>
+    <label class="chk"><input type="checkbox" id="chkSub" checked> Incluir subcarpetas (al elegir carpeta)</label>
+    <button type="button" id="btnClear">Quitar todo</button>
+    <button type="button" class="primary" id="btnRun" disabled>Procesar</button>
+  </div>
+
+  <progress id="prog" value="0" max="1" class="hidden"></progress>
+  <div class="status" id="status"></div>
+
+  <section id="results" class="hidden">
+    <div class="summary">
+      <div><b id="sPdf">0</b><small>PDF procesados</small></div>
+      <div><b id="sRows">0</b><small>exámenes extraídos</small></div>
+      <div class="ok"><b id="sOk">0</b><small>sin observaciones</small></div>
+      <div class="warn"><b id="sRev">0</b><small>para revisar</small></div>
+      <div class="bad"><b id="sNo">0</b><small>formato no reconocido</small></div>
+    </div>
+
+    <div class="downloads">
+      <button type="button" class="primary" id="dlDatos">Descargar Excel de datos</button>
+      <button type="button" id="dlInc">Descargar informe de incidencias</button>
+      <span class="hint" id="incHint"></span>
+    </div>
+
+    <div class="tablewrap">
+      <table id="tabla"><thead></thead><tbody></tbody></table>
+      <p id="tablaNota"></p>
+    </div>
+
+    <details>
+      <summary>Registro de procesamiento</summary>
+      <pre class="log" id="log"></pre>
+    </details>
+  </section>
+
+  <footer>
+    Versión <code id="ver"></code>. Formatos reconocidos: CMT (Centro Médico del Trabajador) y WORKMED.
+    Si aparece un centro médico nuevo, descarga el informe de incidencias: contiene el texto leído de cada
+    página no reconocida y sirve para agregar el formato al programa.
+  </footer>
+</main>
+
+<script>
+// ============================================================================
+// Configuración
+// ============================================================================
+const VERSION = "1.0 (2026-09-29)";
+document.getElementById("ver").textContent = VERSION;
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+const COLUMNAS = [
+  ["archivo",    "Archivo PDF"],
+  ["centro",     "Centro médico"],
+  ["nombre",     "Nombre completo"],
+  ["rut",        "RUT"],
+  ["cargo",      "Cargo"],
+  ["codigo",     "Código de verificación (QR)"],
+  ["reserva",    "N° de reserva"],
+  ["examen",     "Examen"],
+  ["fecha_eval", "Fecha de evaluación"],
+  ["fecha_venc", "Vigencia hasta"],
+  ["resultado",  "Resultado"],
+  ["sucursal",   "Sucursal / lugar"],
+  ["estado",     "Estado extracción"],
+];
+const OBLIGATORIOS = ["nombre", "rut", "cargo", "codigo", "examen", "fecha_eval"];
+const MESES = { enero:"01", febrero:"02", marzo:"03", abril:"04", mayo:"05", junio:"06", julio:"07",
+  agosto:"08", septiembre:"09", setiembre:"09", octubre:"10", noviembre:"11", diciembre:"12" };
+
+// ============================================================================
+// Extracción de texto (pdf.js). Agrupa por línea para imitar la lectura
+// natural de la página: elementos con la misma coordenada Y van juntos.
+// ============================================================================
+async function textoDePagina(page) {
+  const content = await page.getTextContent();
+  const items = content.items.filter(it => it.str && it.str.trim() !== "");
+  const lineas = [];
+  for (const it of items) {
+    const y = Math.round(it.transform[5] / 3) * 3;  // tolerancia de 3 pt
+    const x = it.transform[4];
+    let linea = lineas.find(l => Math.abs(l.y - y) <= 3);
+    if (!linea) { linea = { y, partes: [] }; lineas.push(linea); }
+    linea.partes.push({ x, s: it.str });
+  }
+  lineas.sort((a, b) => b.y - a.y);
+  return lineas
+    .map(l => l.partes.sort((a, b) => a.x - b.x).map(p => p.s).join(" ").replace(/\s+/g, " ").trim())
+    .join("\n");
+}
+
+async function textoPorPaginas(arrayBuffer) {
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const paginas = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    paginas.push(await textoDePagina(page));
+  }
+  return paginas;
+}
+
+// ============================================================================
+// Parsers por formato
+// ============================================================================
+function buscar(re, texto) {
+  const m = texto.match(re);
+  return m ? m[1].replace(/\s+/g, " ").trim() : "";
+}
+
+function fechaLargaACorta(s) {
+  const m = s.match(/(\d{1,2})\s+de\s+([A-Za-zÁÉÍÓÚáéíóú]+)\s+de\s+(\d{4})/);
+  if (!m) return s;
+  const mes = MESES[m[2].toLowerCase()] || "??";
+  return `${m[1].padStart(2, "0")}-${mes}-${m[3]}`;
+}
+
+function detectarFormato(texto) {
+  if (/con el siguiente c[oó]digo/i.test(texto)) return "cmt";
+  if (/workmed/i.test(texto) && /Folio ID/.test(texto)) return "workmed";
+  return null;
+}
+
+function parsearCMT(t) {
+  return {
+    centro:     "CMT",
+    nombre:     buscar(/Nombre:\s*(.+?)\s+RUT:/s, t),
+    rut:        buscar(/Nombre:[\s\S]+?RUT:\s*([\d.]+-[\dkK])/, t),
+    cargo:      buscar(/Cargo:\s*(.+?)\s*(?:\n|$)/, t),
+    codigo:     buscar(/c[oó]digo:\s*([A-Za-z0-9]+)/i, t),
+    reserva:    buscar(/N[°º]\s*de\s*reserva:\s*([A-Za-z0-9]+)/i, t),
+    examen:     buscar(/BATER[IÍ]A\s+DE\s+RIESGO:\s*(.+?)\s+(?:Fecha de evaluaci|RESULTADO|EXAMEN)/is, t),
+    fecha_eval: buscar(/Fecha de evaluaci[oó]n:\s*(\d{2}-\d{2}-\d{4})/i, t),
+    fecha_venc: buscar(/Fecha de vencimiento:\s*(\d{2}-\d{2}-\d{4})/i, t),
+    resultado:  buscar(/RESULTADO DE EVALUACI[OÓ]N:\s*([A-ZÁÉÍÓÚÑ ]+?)\s+(?:Fecha|EXAMEN|N[°º])/, t),
+    sucursal:   buscar(/Sucursal de evaluaci[oó]n:\s*(.+?)\s*(?:\n|$)/i, t),
+  };
+}
+
+function parsearWORKMED(t) {
+  const examen = buscar(/Evaluaci[oó]n Laboral\s*\n\s*(.+?)\s*\n/i, t);
+  const fecha = buscar(/Fecha de Evaluaci[oó]n:\s*(\d{2}-\d{2}-\d{4})/i, t)
+             || buscar(/Fecha:\s*(\d{2}-\d{2}-\d{4})/, t);
+  const cargo = buscar(/Cargo al que postula\/ocupa\s*:?\s*(.+?)\s*(?:\n|$)/i, t)
+             || buscar(/(?:^|\n)Cargo:\s*(.+?)\s*(?:\n|$)/, t);
+  let resultado = buscar(/RESULTADO:\s*([A-ZÁÉÍÓÚÑ ]+?)\.\s/, t);   // "APTO." / "NO APTO."
+  if (!resultado && /SCREENING/i.test(examen)) {
+    // En el screening no hay campo RESULTADO: se lee la columna marcada (◉).
+    if (/[◉●]/.test(t)) {
+      resultado = /\(\w{2,3}\)\s*[○◯]\s*[◉●]/.test(t) ? "NO NEGATIVO" : "NEGATIVO";
+    }
+  }
+  return {
+    centro:     "WORKMED",
+    nombre:     buscar(/Nombre:\s*(.+?)\s+Nombre:/s, t),
+    rut:        buscar(/(?:^|\n)RUT:\s*([\d.]+-[\dkK])/, t),
+    cargo,
+    codigo:     buscar(/Folio ID:\s*([\w-]+)/, t),
+    reserva:    "",
+    examen,
+    fecha_eval: fecha,
+    fecha_venc: fechaLargaACorta(buscar(/VIGENCIA HASTA:\s*(.+?)\s*(?:\n|$)/, t)),
+    resultado,
+    sucursal:   buscar(/Lugar de Evaluaci[oó]n:\s*(.+?)\s+(?:Fecha de Emisi|Hora toma)/is, t),
+  };
+}
+
+// ============================================================================
+// Procesamiento de un PDF -> filas de datos + incidencias
+// ============================================================================
+function filaVacia(nombreArchivo) {
+  const f = {};
+  for (const [c] of COLUMNAS) f[c] = "";
+  f.archivo = nombreArchivo;
+  return f;
+}
+
+async function procesarPDF(file, ruta) {
+  const filas = [], incidencias = [];
+  let paginas;
+  try {
+    paginas = await textoPorPaginas(await file.arrayBuffer());
+  } catch (e) {
+    const f = filaVacia(ruta); f.estado = "ERROR al abrir: " + (e.message || e);
+    incidencias.push({ archivo: ruta, pagina: "", motivo: f.estado, faltan: "", texto: "" });
+    return { filas: [f], incidencias };
+  }
+
+  if (!paginas.some(p => p.trim())) {
+    const f = filaVacia(ruta); f.estado = "SIN TEXTO (PDF escaneado, requiere OCR)";
+    incidencias.push({ archivo: ruta, pagina: "todas", motivo: f.estado, faltan: "", texto: "" });
+    return { filas: [f], incidencias };
+  }
+
+  const vistos = new Set();
+  paginas.forEach((texto, idx) => {
+    const fmt = detectarFormato(texto);
+    if (!fmt) return;
+    const datos = fmt === "cmt" ? parsearCMT(texto) : parsearWORKMED(texto);
+    const clave = datos.codigo + "|" + datos.examen;
+    if (!datos.codigo || vistos.has(clave)) return;
+    vistos.add(clave);
+
+    const f = Object.assign(filaVacia(ruta), datos);
+    f.nombre = f.nombre.toUpperCase();
+    const faltan = OBLIGATORIOS.filter(c => !f[c]);
+    if (!f.resultado) faltan.push("resultado");
+    f.estado = faltan.length ? "REVISAR: falta " + faltan.join(", ") : "OK";
+    filas.push(f);
+    if (faltan.length) {
+      incidencias.push({ archivo: ruta, pagina: idx + 1, motivo: "Campos incompletos (" + datos.centro + ")",
+                         faltan: faltan.join(", "), texto });
+    }
+  });
+
+  if (!filas.length) {
+    const f = filaVacia(ruta); f.estado = "FORMATO NO RECONOCIDO";
+    filas.push(f);
+    // Se adjunta el texto de las primeras páginas para poder agregar el formato.
+    paginas.slice(0, 3).forEach((texto, idx) => {
+      incidencias.push({ archivo: ruta, pagina: idx + 1, motivo: "FORMATO NO RECONOCIDO", faltan: "", texto });
+    });
+  }
+  return { filas, incidencias };
+}
+
+// ============================================================================
+// Generación de Excel (SheetJS)
+// ============================================================================
+function libroDatos(filas) {
+  const aoa = [COLUMNAS.map(([, t]) => t), ...filas.map(f => COLUMNAS.map(([c]) => f[c]))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = COLUMNAS.map(([c, t]) => ({
+    wch: Math.min(60, Math.max(t.length, ...filas.map(f => String(f[c]).length)) + 2) }));
+  ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: COLUMNAS.length - 1 } }) };
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Exámenes");
+  return wb;
+}
+
+function libroIncidencias(inc, resumen) {
+  const wb = XLSX.utils.book_new();
+  const r = XLSX.utils.aoa_to_sheet([
+    ["Informe de incidencias - Extractor de exámenes ocupacionales"],
+    ["Versión del programa", VERSION],
+    ["Fecha de procesamiento", new Date().toLocaleString("es-CL")],
+    ["PDF procesados", resumen.pdf],
+    ["Exámenes extraídos", resumen.filas],
+    ["Sin observaciones", resumen.ok],
+    ["Para revisar", resumen.rev],
+    ["Formato no reconocido", resumen.norec],
+    [],
+    ["Cómo usar este informe: la hoja \"Incidencias\" contiene, por cada PDF con problemas, el motivo y el texto tal como lo leyó el programa."],
+    ["Ese texto permite agregar un formato nuevo o corregir la lectura de un campo sin necesidad de reenviar el PDF completo."],
+  ]);
+  r["!cols"] = [{ wch: 28 }, { wch: 60 }];
+  XLSX.utils.book_append_sheet(wb, r, "Resumen");
+
+  const cab = ["Archivo PDF", "Página", "Motivo", "Campos faltantes", "Texto leído de la página"];
+  const aoa = [cab, ...inc.map(i => [i.archivo, i.pagina, i.motivo, i.faltan, (i.texto || "").slice(0, 32000)])];
+  const ws = XLSX.utils.aoa_to_sheet(aoa.length > 1 ? aoa : [cab, ["Sin incidencias", "", "", "", ""]]);
+  ws["!cols"] = [{ wch: 40 }, { wch: 8 }, { wch: 34 }, { wch: 28 }, { wch: 100 }];
+  ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+  XLSX.utils.book_append_sheet(wb, ws, "Incidencias");
+  return wb;
+}
+
+function blobDeLibro(wb) {
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  return new Blob([out], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+}
+
+// ============================================================================
+// Descarga: usa la capacidad "downloads" si la página está publicada en
+// claude.ai; en cualquier otro sitio (archivo local, GitHub Pages) usa el
+// mecanismo estándar del navegador.
+// ============================================================================
+const downloadsReady = (window.claude && typeof window.claude.use === "function")
+  ? window.claude.use("downloads").catch(() => null)
+  : Promise.resolve(null);
+
+async function guardar(nombre, blob) {
+  const dl = await downloadsReady;
+  if (dl) {
+    try { await dl.save({ filename: nombre, data: blob }); return; }
+    catch (e) { if (e && e.code === "declined") return; /* otros errores: intentar vía navegador */ }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = nombre;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// ============================================================================
+// Interfaz
+// ============================================================================
+const $ = id => document.getElementById(id);
+let archivos = [];          // {file, ruta}
+let ultimo = null;          // {filas, incidencias, resumen}
+
+function actualizarConteo() {
+  $("count").textContent = archivos.length
+    ? `${archivos.length} archivo(s) PDF listos para procesar.`
+    : "Ningún archivo cargado.";
+  $("btnRun").disabled = archivos.length === 0;
+}
+
+function agregarArchivos(lista, deCarpeta) {
+  const incluirSub = $("chkSub").checked;
+  for (const file of lista) {
+    if (!/\.pdf$/i.test(file.name)) continue;
+    let ruta = file.webkitRelativePath || file.name;
+    if (deCarpeta) {
+      const partes = ruta.split("/");
+      partes.shift();                              // quita la carpeta raíz elegida
+      if (!incluirSub && partes.length > 1) continue;
+      ruta = partes.join("/");
+    }
+    if (!archivos.some(a => a.ruta === ruta && a.file.size === file.size)) archivos.push({ file, ruta });
+  }
+  actualizarConteo();
+}
+
+$("btnFiles").addEventListener("click", e => { e.stopPropagation(); $("inFiles").click(); });
+$("btnFolder").addEventListener("click", e => { e.stopPropagation(); $("inFolder").click(); });
+$("inFiles").addEventListener("change", e => { agregarArchivos(e.target.files, false); e.target.value = ""; });
+$("inFolder").addEventListener("change", e => { agregarArchivos(e.target.files, true); e.target.value = ""; });
+$("btnClear").addEventListener("click", () => { archivos = []; actualizarConteo(); $("results").classList.add("hidden"); $("status").textContent = ""; });
+
+const drop = $("drop");
+drop.addEventListener("click", () => $("inFiles").click());
+drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("inFiles").click(); } });
+["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", async e => {
+  const items = e.dataTransfer.items;
+  if (items && items.length && items[0].webkitGetAsEntry) {
+    const files = [];
+    const incluirSub = $("chkSub").checked;
+    async function leerEntrada(entry, prefijo, nivel) {
+      if (entry.isFile) {
+        const f = await new Promise(res => entry.file(res));
+        Object.defineProperty(f, "webkitRelativePath", { value: prefijo + f.name });
+        files.push(f);
+      } else if (entry.isDirectory && (incluirSub || nivel === 0)) {
+        const reader = entry.createReader();
+        let lote;
+        do {
+          lote = await new Promise(res => reader.readEntries(res));
+          for (const en of lote) await leerEntrada(en, prefijo + entry.name + "/", nivel + 1);
+        } while (lote.length);
+      }
+    }
+    for (const it of items) { const en = it.webkitGetAsEntry(); if (en) await leerEntrada(en, "", 0); }
+    agregarArchivos(files, false);
+  } else {
+    agregarArchivos(e.dataTransfer.files, false);
+  }
+});
+
+function log(msg) { const l = $("log"); l.textContent += msg + "\n"; l.scrollTop = l.scrollHeight; }
+
+$("btnRun").addEventListener("click", async () => {
+  $("btnRun").disabled = true;
+  $("results").classList.add("hidden");
+  $("log").textContent = "";
+  const prog = $("prog"); prog.classList.remove("hidden"); prog.max = archivos.length; prog.value = 0;
+
+  const filas = [], incidencias = [];
+  for (let i = 0; i < archivos.length; i++) {
+    const { file, ruta } = archivos[i];
+    $("status").textContent = `Procesando ${i + 1} de ${archivos.length}: ${ruta}`;
+    const r = await procesarPDF(file, ruta);
+    filas.push(...r.filas); incidencias.push(...r.incidencias);
+    const ok = r.filas.filter(f => f.estado === "OK").length;
+    log(`[${i + 1}/${archivos.length}] ${ruta}: ${r.filas.length} examen(es), ${ok} OK`);
+    prog.value = i + 1;
+    await new Promise(res => setTimeout(res, 0));   // deja respirar a la interfaz
+  }
+
+  const resumen = {
+    pdf: archivos.length, filas: filas.length,
+    ok: filas.filter(f => f.estado === "OK").length,
+    rev: filas.filter(f => f.estado.startsWith("REVISAR")).length,
+    norec: filas.filter(f => f.estado === "FORMATO NO RECONOCIDO").length,
+  };
+  ultimo = { filas, incidencias, resumen };
+  $("status").textContent = `Listo: ${filas.length} exámenes de ${archivos.length} PDF.`;
+  mostrarResultados();
+  $("btnRun").disabled = false;
+});
+
+function mostrarResultados() {
+  const { filas, incidencias, resumen } = ultimo;
+  $("sPdf").textContent = resumen.pdf; $("sRows").textContent = resumen.filas;
+  $("sOk").textContent = resumen.ok; $("sRev").textContent = resumen.rev; $("sNo").textContent = resumen.norec;
+  $("incHint").textContent = incidencias.length
+    ? `${incidencias.length} incidencia(s). El informe incluye el texto leído de cada página con problemas para poder actualizar el programa.`
+    : "No hubo incidencias; el informe solo contiene el resumen.";
+
+  const thead = $("tabla").querySelector("thead"), tbody = $("tabla").querySelector("tbody");
+  thead.innerHTML = "<tr>" + COLUMNAS.map(([, t]) => `<th>${t}</th>`).join("") + "</tr>";
+  const MAX = 200;
+  tbody.innerHTML = filas.slice(0, MAX).map(f => "<tr>" + COLUMNAS.map(([c]) => {
+    const v = String(f[c]).replace(/</g, "&lt;");
+    if (c !== "estado") return `<td>${v}</td>`;
+    const cls = f.estado === "OK" ? "estado-ok" : f.estado.startsWith("REVISAR") ? "estado-warn" : "estado-bad";
+    return `<td class="${cls}">${v}</td>`;
+  }).join("") + "</tr>").join("");
+  $("tablaNota").textContent = filas.length > MAX ? `Se muestran las primeras ${MAX} filas; el Excel contiene las ${filas.length}.` : "";
+  $("results").classList.remove("hidden");
+}
+
+function marcaTiempo() {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+}
+$("dlDatos").addEventListener("click", () => guardar(`examenes_${marcaTiempo()}.xlsx`, blobDeLibro(libroDatos(ultimo.filas))));
+$("dlInc").addEventListener("click", () => guardar(`incidencias_${marcaTiempo()}.xlsx`, blobDeLibro(libroIncidencias(ultimo.incidencias, ultimo.resumen))));
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+# Nunca subir datos de trabajadores al repositorio
+*.pdf
+*.xlsx
+*.xls
+*.csv
+# Archivos temporales de Python
+__pycache__/
+*.pyc
